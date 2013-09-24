@@ -2,21 +2,14 @@
 (ql:quickload "yason")
 (ql:quickload "drakma")
 
-;; TODO: The end goal is to not have these globs, but to pass them around from function to function. Therefore, all functions must be written so that they accept a hashmap that looks just like *statistics-table*/*movie-data* so I can pass it in. The glob stays though, because it makes new functionality easier to test.
-(defparameter *statistics-table*
-  (make-hash-table :test 'equal))
-(defparameter *movie-data*
-  (make-hash-table :test 'equal))
 
 (defparameter *api-key*
   "jh67gk6sjhajmt6gt5b2ujvq")
-
 (defparameter *api-call-movies-in-theaters*
   "http://api.rottentomatoes.com/api/public/v1.0/lists/movies/in_theaters?page_limit=50&country=us&")
 
 (defun create-movie-data-table ()
-  (return (make-hash-table :test 'equal)))
-
+  (make-hash-table :test 'equal))
 (defun create-statistics-table ()
   (let ((table (make-hash-table :test 'equal)))
     ;; This initializes the hashtable with predefined keys.
@@ -47,14 +40,22 @@
 	      "released-unsorted" "critical-score-unsorted" "audience-score-unsorted"))
     table))
 
+;; TODO: The end goal is to not have these globs, but to pass them around from function to function. Therefore, all functions must be written so that they accept a hashmap that looks just like *statistics-table*/*movie-data* so I can pass it in. The glob stays though, because it makes new functionality easier to test.
+(defparameter *statistics-table*
+  (make-hash-table :test 'equal))
+(defparameter *movie-data*
+  (make-hash-table :test 'equal))
+
 (defun reset-stats ()
-  (setf *statistics-table* (create-statistics-table)))
+  (setf *statistics-table* (create-statistics-table))
+  (setf *movie-data* (create-movie-data-table))
+  'T)
+
 
 (defun insert-movie-if-unknown (moviehash)
-  (let* ((movieID (gethash "id" moviehash))
-	 (hashslot (gethash movieID *movie-data*)))
-    (when hashslot
-	(setf hashslot moviehash))))
+  (let* ((movieID (gethash "id" moviehash)))
+    (unless (gethash movieID *movie-data*)
+      (setf (gethash movieID *movie-data*) moviehash))))
 
 (defun insert-movie-data (moviehash statistics-table)
   (let ((critical-score (gethash "critics_score" (gethash "ratings" moviehash)))
@@ -76,10 +77,9 @@
 
 (defun scrape-theaters (api-call)
   (let ((dl (yason:parse (scrape api-call))))
-;    (print-hashmap (gethash "links" dl)) ; This function is defined in helpfunctions.lisp and is not loaded as part of standard procedure.
     (mapcar #'(lambda (x) ;;; Currying *statistics-table* into the function as part of the refactoring effort to remove globs
 		(insert-movie-data x *statistics-table*)
-		(insert-movie-movie-if-unknown x))
+		(insert-movie-if-unknown x))
 	    (gethash "movies" dl)) 
     (let ((next (gethash "next" (gethash "links" dl))))
       (if next (scrape-theaters (concatenate 'string next "&")))
@@ -112,6 +112,9 @@ Please note that this function depends on the hashmap structure defined in the f
   (start)
   (exit))
 
+;; TODO: Make it clear that we're saving the statistics over the movies, not the overall movies.
+;; TODO: Use the insertion function to recreate the *statistics-table* hashmap
+;; TODO: Nuke the *statistics-hashmap*, but append to the movie-hashmap, and THEN recreate.
 (defun save-statistics-to-file (filename statistics-hashmap)
   (with-open-file (fstream filename :direction :output)
     (yason:encode statistics-hashmap (yason:make-json-output-stream fstream :indent 'T))))
@@ -124,3 +127,5 @@ Please note that this function depends on the hashmap structure defined in the f
 (defparameter *movie-testing*
   (with-open-file (fstream "sample.json" :direction :input)
     (yason:parse fstream)))
+
+;(defun probability

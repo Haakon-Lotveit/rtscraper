@@ -1,0 +1,20 @@
+{
+    "id":"771267761",
+    "title":"Riddick",
+    "year":2013,
+    "mpaa_rating":"R","runtime":119,
+    "critics_consensus":"It may not win the franchise many new converts, but this back-to-basics outing brings Riddick fans more of the brooding sci-fi action they've come to expect.",
+    "release_dates":{"theater":"2013-09-06"},
+    "ratings":{"critics_rating":"Rotten",
+	       "critics_score":57,
+	       "audience_rating":"Upright",
+	       "audience_score":66},
+    "synopsis":"Riddick, the latest chapter of the groundbreaking saga that began with 2000's hit sci-fi film Pitch Black and 2004's The Chronicles of Riddick reunites writer/director David Twohy (A Perfect Getaway, The Fugitive) and star Vin Diesel (the Fast and Furious franchise, xXx). Diesel reprises his role as the antihero Riddick, a dangerous, escaped convict wanted by every bounty hunter in the known galaxy. The infamous Riddick has been left for dead on a sun-scorched planet that appears to be lifeless. Soon, however, he finds himself fighting for survival against alien predators more lethal than any human he's encountered. The only way off is for Riddick to activate an emergency beacon and alert mercenaries who rapidly descend to the planet in search of their bounty. The first ship to arrive carries a new breed of merc, more lethal and violent, while the second is captained by a man whose pursuit of Riddick is more personal. With time running out and a storm on the horizon that no one could survive, his hunters won't leave the planet without Riddick's head as their trophy. (c) Universal",
+    "posters":{"thumbnail":"http://content8.flixster.com/movie/11/17/20/11172082_mob.jpg",
+	       "profile":"http://content8.flixster.com/movie/11/17/20/11172082_pro.jpg",
+	       "detailed":"http://content8.flixster.com/movie/11/17/20/11172082_det.jpg",
+	       "original":"http://content8.flixster.com/movie/11/17/20/11172082_ori.jpg"},
+    "abridged_cast":[{"name":"Vin Diesel",
+		      "id":"162652472",
+		      "characters":["Riddick"]}]
+}

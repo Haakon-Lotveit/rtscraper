@@ -1,0 +1,3 @@
+#!/bin/bash
+
+sbcl --noinform --noprint --load scraper.lisp --eval \(scripted-run\)

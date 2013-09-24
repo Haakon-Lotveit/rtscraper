@@ -1,0 +1,82 @@
+;; Because I cannot into ASDF nor QuickProject
+(ql:quickload "yason")
+(ql:quickload "alexandria")
+(ql:quickload "drakma")
+
+(defparameter *statistics-table*
+  (make-hash-table :test 'equal))
+
+(defun reset-stats ()
+  (setf *statistics-table*
+	(make-hash-table :test 'equal))
+  ;; This initializes the hashtable with predefined keys.
+  (mapcar (lambda (x) 
+	    (setf (gethash x *statistics-table*) 0))
+	  '("released-01" "critical-score-01" "audience-score-01"
+	    "released-02" "critical-score-02" "audience-score-02"
+	    "released-03" "critical-score-03" "audience-score-03"
+	    "released-04" "critical-score-04" "audience-score-04"
+	    "released-05" "critical-score-05" "audience-score-05"
+	    "released-06" "critical-score-06" "audience-score-06"
+	    "released-07" "critical-score-07" "audience-score-07"
+	    "released-08" "critical-score-08" "audience-score-08"
+	    "released-09" "critical-score-09" "audience-score-09"
+	    "released-10" "critical-score-10" "audience-score-10"
+	    "released-11" "critical-score-11" "audience-score-11"
+	    "released-12" "critical-score-12" "audience-score-12"
+	    "num-movies" "avg-critical-score" "avg-audience-score"))
+  *statistics-table*)
+
+(defun insert-movie-data (moviehash)
+  (flet ((stat-inc (string increase)
+	   (incf (gethash string *statistics-table*) increase))
+	 (string-to-month (iso-date-string)
+	   (subseq iso-date-string 5 7)))
+	 (let ((month (string-to-month (gethash "theater" (gethash "release_dates" moviehash))))
+	       ;(runtime (gethash "runtime" moviehash))
+	       ;(mpaa (concatenate 'String "MPAA:" (gethash "mpaa_rating" moviehash)))
+	       (critical-score (gethash "critics_score" (gethash "ratings" moviehash)))
+	       (audience-score (gethash "audience_score" (gethash "ratings" moviehash))))
+	   (stat-inc "num-movies" 1)
+	   (stat-inc "avg-critical-score" critical-score)
+	   (stat-inc "avg-audience-score" audience-score)
+	   (stat-inc (concatenate 'String "released-" month) 1)
+	   (stat-inc (concatenate 'String "critical-score-" month) critical-score)
+	   (stat-inc (concatenate 'String "audience-score-" month) audience-score))))
+
+(defun scrape (api-call api-key)
+  (let ((uri (concatenate 'string api-call "apikey=" api-key)))
+    (drakma:http-request uri)))
+
+(defparameter *api-key*
+  "jh67gk6sjhajmt6gt5b2ujvq")
+
+(defparameter *api-call-movies-in-theaters*
+  "http://api.rottentomatoes.com/api/public/v1.0/lists/movies/in_theaters?page_limit=50&country=us&")
+
+(defun scrape-theaters (api-call api-key)
+  (let ((dl (yason:parse (scrape api-call api-key))))
+    (mapcar #'insert-movie-data (gethash "movies" dl))
+    (let ((next (gethash "next" (gethash "links" dl))))
+      (if next (scrape-theaters (concatenate 'string next "&") *api-key*)))))
+
+					;This is the function that should be ran after the application has loaded.
+(defun start ()
+  (reset-stats)
+  (scrape-theaters *api-call-movies-in-theaters* *api-key*)
+  (let* ((num-movies (gethash "num-movies" *statistics-table*))
+	 (avg-crit-rating (float (/ (gethash "avg-critical-score" *statistics-table*) num-movies)))
+	 (avg-aud-rating (float (/ (gethash "avg-audience-score" *statistics-table*) num-movies))))
+    (format 'T "Total number of movies: ~A Average critical rating: ~A Average audience rating: ~A~%"
+	    num-movies avg-crit-rating avg-aud-rating)
+    ;; Runs through the months and prints months we have data points for
+    (mapcar (lambda (num)
+	      (let ((rel (gethash (concatenate 'string "released-" num) *statistics-table*)))
+		(if (> rel 0) (format 'T 
+				      (concatenate 'string "  Movies in " num "th month: ~A Average critical rating: ~A Average audience rating: ~A~%" )
+				      rel
+				      (float (/ (gethash (concatenate 'string "critical-score-" num) *statistics-table*) rel))
+				      (float (/ (gethash (concatenate 'string "audience-score-" num) *statistics-table*) rel))))))
+
+	    '("01" "02" "03" "04" "05" "06" "07" "08" "09" "10" "11" "12" )))
+  (exit))

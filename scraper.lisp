@@ -2,7 +2,7 @@
 (ql:quickload "yason")
 (ql:quickload "drakma")
 
-
+;; globs and functions that manipulatethem
 (defparameter *api-key*
   "jh67gk6sjhajmt6gt5b2ujvq")
 (defparameter *api-call-movies-in-theaters*
@@ -51,7 +51,7 @@
   (setf *movie-data* (create-movie-data-table))
   'T)
 
-
+;; Functions that deals with data and their manipulation and representation
 (defun insert-movie-if-unknown (moviehash)
   (let* ((movieID (gethash "id" moviehash)))
     (unless (gethash movieID *movie-data*)
@@ -101,6 +101,7 @@ Please note that this function depends on the hashmap structure defined in the f
   (print-data statistics-table '("01" "02" "03" "04" "05" "06" "07" "08" "09" "10" "11" "12" ) "  Movies in ~Ath month: ~A Average critical rating: ~A Average audience rating: ~A~%" 'T)
   (print-data statistics-table '("G" "PG" "PG-13" "Unrated" "R" "NC-17") "Movies rated ~A: ~A Average critical rating: ~A Average audience rating: ~A~%" 'T))
 
+;; Some basic facilities to run this program as a standalone thing and not running it through a REPL
 (defun start ()
   (reset-stats)
   (scrape-theaters *api-call-movies-in-theaters*)
@@ -123,9 +124,93 @@ Please note that this function depends on the hashmap structure defined in the f
   (with-open-file (fstream filename :direction :input)
     (yason:parse fstream)))
 
+(defun save-stats (filename)
+  (save-statistics-to-file filename *movie-data*))
+(defun load-stats (filename)
+  "ERROR: NOT IMPLEMENTED")
+
 ;; This code is for testing porpoises. Don't ruin everything. ;)
 (defparameter *movie-testing*
   (with-open-file (fstream "sample.json" :direction :input)
     (yason:parse fstream)))
 
-;(defun probability
+;;; This entire section is for calculating probabilities.
+;;; From the definition of different types of probabilities to functions that generate the tests (or filter functions)
+;;; to feed these probability functions.
+;;; All that's really needed here is a CLi bit, and I'm golden.
+
+;; TODO: Generalize functions as to not read from globs
+(defun probability (f)
+  "Iterates over the movies and calculates the propability of testfun returning a non-nil value."
+  (let ((num-movies 0)
+	(num-successful 0))
+    (loop for key being the hash-keys of *movie-data*
+       do
+	 (incf num-movies)
+	 (if (funcall f (gethash key *movie-data*))
+	     (incf num-successful)))
+    (float (/ num-successful num-movies))))
+
+(defun joint-probability (a b)
+  (let ((num-movies 0)
+	(num-successful 0))
+    (loop for key being the hash-keys of *movie-data*
+       do
+	 (incf num-movies)
+	 (if (and (funcall a (gethash key *movie-data*))
+		  (funcall b (gethash key *movie-data*)))
+	     (incf num-successful)))
+    (float (/ num-successful num-movies))))
+  
+(defun conditional-probability (a b)
+  (/ (joint-probability a b)
+     (probability b)))
+
+					; Sample filter functions
+(defun rated-R (movie)
+  (string= "R" (gethash "mpaa_rating" movie)))
+
+(defun critic-rating-above-50 (movie)
+  (>= (gethash "critics_score" (gethash "ratings" movie)) 50))
+
+;; General helpful functions
+(defun nested-hash-lookup (strings hash)
+  (let ((nexthash (gethash (car strings) hash))
+	(nextkey (cdr strings)))
+    (if nextkey
+	(nested-hash-lookup nextkey nexthash)
+	nexthash)))
+
+;; Generator functions that generates filter functions for the probability functions. Functions functions functions functions.
+(defun critic-rating (&key (minimum-score 0) (maximum-score 100))
+  (lambda (movie)
+    (and
+     (>= (gethash "critics_score" (gethash "ratings" movie)) minimum-score)
+     (<= (gethash "critics_score" (gethash "ratings" movie)) maximum-score))))
+
+(defun audience-rating (&key (minimum-score 0) (maximum-score 100))
+  (lambda (movie)
+    (and
+     (>= (gethash "audience_score" (gethash "ratings" movie)) minimum-score)
+     (<= (gethash "audience_score" (gethash "ratings" movie)) maximum-score))))
+
+(defun mpaa-rating (rating)
+  (lambda (movie)
+    (string-equal (gethash "mpaa_rating" movie) rating)))
+
+
+(defun released-month (month)
+  (lambda (movie)
+    (string-equal
+     month
+     (subseq (gethash "theater" (gethash "release_dates" movie))
+	     5 7)))) ;;; The fifth to seventh element in the string represent the month of the ISO-date
+  
+(defun runtime (&key (minimum-length 0) (maximum-length 0))
+  (lambda (movie)
+    (let ((runtime (gethash "runtime" movie)))
+      (and
+       (if (> maximum-length 0)
+	   (<= runtime maximum-length)
+	   'T)
+       (> runtime minimum-length)))))

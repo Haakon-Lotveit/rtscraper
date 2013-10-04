@@ -162,14 +162,10 @@ Please note that this function depends on the hashmap structure defined in the f
 	     (incf num-successful)))
     (float (/ num-successful num-movies))))
   
-(defun conditional-probability (a b)
+(defun conditional-probability (a b) ;; There is a bug here if P(b) is 0.
   (/ (joint-probability a b)
      (probability b)))
-
 					; Sample filter functions
-(defun rated-R (movie)
-  (string= "R" (gethash "mpaa_rating" movie)))
-
 (defun critic-rating-above-50 (movie)
   (>= (gethash "critics_score" (gethash "ratings" movie)) 50))
 
@@ -182,17 +178,17 @@ Please note that this function depends on the hashmap structure defined in the f
 	nexthash)))
 
 ;; Generator functions that generates filter functions for the probability functions. Functions functions functions functions.
-(defun critic-rating (&key (minimum-score 0) (maximum-score 100))
+(defun critic-rating (&key (min 0) (max 100))
   (lambda (movie)
     (and
-     (>= (gethash "critics_score" (gethash "ratings" movie)) minimum-score)
-     (<= (gethash "critics_score" (gethash "ratings" movie)) maximum-score))))
+     (>= (gethash "critics_score" (gethash "ratings" movie)) min)
+     (<= (gethash "critics_score" (gethash "ratings" movie)) max))))
 
-(defun audience-rating (&key (minimum-score 0) (maximum-score 100))
+(defun audience-rating (&key (min 0) (max 100))
   (lambda (movie)
     (and
-     (>= (gethash "audience_score" (gethash "ratings" movie)) minimum-score)
-     (<= (gethash "audience_score" (gethash "ratings" movie)) maximum-score))))
+     (>= (gethash "audience_score" (gethash "ratings" movie)) min)
+     (<= (gethash "audience_score" (gethash "ratings" movie)) max))))
 
 (defun mpaa-rating (rating)
   (lambda (movie)

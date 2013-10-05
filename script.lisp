@@ -56,3 +56,26 @@ Please note that this function depends on the hashmap structure defined in the f
   (start)
   (print-data-formatted (generate-basic-statistics *movie-data*))
   (exit))
+
+;; General helpful functions
+(defun nested-hash-lookup (strings hash)
+  (let ((nexthash (gethash (car strings) hash))
+	(nextkey (cdr strings)))
+    (if nextkey
+	(nested-hash-lookup nextkey nexthash)
+	nexthash)))
+
+(defun insert-movie-data (moviehash statistics-table)
+  (let ((critical-score (gethash "critics_score" (gethash "ratings" moviehash)))
+	(audience-score (gethash "audience_score" (gethash "ratings" moviehash))))
+    ;;(runtime (gethash "runtime" moviehash)) ;← Currently commented out, since we do not use this information for anything.
+    (flet ((string-to-month (string)
+	     (subseq string 5 7))
+	   (stat-inc (string)
+	     (incf (gethash (concatenate 'String "released-" string) statistics-table) 1)
+	     (incf (gethash (concatenate 'String "critical-score-" string) statistics-table) critical-score)
+	     (incf (gethash (concatenate 'String "audience-score-" string) statistics-table) audience-score)))
+      (stat-inc "unsorted")
+      (stat-inc (string-to-month (gethash "theater" (gethash "release_dates" moviehash))))
+      (stat-inc (gethash "mpaa_rating" moviehash)))))
+

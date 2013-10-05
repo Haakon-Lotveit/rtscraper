@@ -1,11 +1,12 @@
 ;; Because I cannot into ASDF nor QuickProject
+;; TODO: Load these a different way, and if they're not found, try to load them via QuickLisp instead
 (ql:quickload "yason")
 (ql:quickload "drakma")
 
 ;; globs and functions that manipulatethem
 (defparameter *api-key*
   "jh67gk6sjhajmt6gt5b2ujvq")
-(defparameter *api-call-movies-in-theaters*
+(defparameter *api-call-get-all-movies-in-theaters*
   "http://api.rottentomatoes.com/api/public/v1.0/lists/movies/in_theaters?page_limit=50&country=us&")
 
 (defun create-movie-data-table ()
@@ -19,25 +20,26 @@
   (setf *movie-data* (create-movie-data-table))
   'T)
 
-;; Functions that deals with data and their manipulation and representation
-(defun insert-movie-if-unknown (moviehash)
-  (let* ((movieID (gethash "id" moviehash)))
-    (unless (gethash movieID *movie-data*)
-      (setf (gethash movieID *movie-data*) moviehash))))
+;; Hashmap convenience functions
+(defun get-all-members (hashmap disallowed-keys)
+  "returns all the members of a given hashmap, excepting the ones in the list of disallowed-keys"
+  (let ((members ()))
+    (loop for key being the hash-keys of hashmap do
+	 (unless (member key disallowed-keys :test 'string-equal)
+	   (setf members (cons (gethash key hashmap) members))))
+    members))
 
-(defun insert-movie-data (moviehash statistics-table)
-  (let ((critical-score (gethash "critics_score" (gethash "ratings" moviehash)))
-	(audience-score (gethash "audience_score" (gethash "ratings" moviehash))))
-    ;;(runtime (gethash "runtime" moviehash)) ;← Currently commented out, since we do not use this information for anything.
-    (flet ((string-to-month (string)
-	     (subseq string 5 7))
-	   (stat-inc (string)
-	     (incf (gethash (concatenate 'String "released-" string) statistics-table) 1)
-	     (incf (gethash (concatenate 'String "critical-score-" string) statistics-table) critical-score)
-	     (incf (gethash (concatenate 'String "audience-score-" string) statistics-table) audience-score)))
-      (stat-inc "unsorted")
-      (stat-inc (string-to-month (gethash "theater" (gethash "release_dates" moviehash))))
-      (stat-inc (gethash "mpaa_rating" moviehash)))))
+(defun get-all-movies ()
+  (get-all-members *movie-data* '("timestamp")))
+
+;; Functions that deals with data and their manipulation and representation
+(defun insert-movie-if-unknown-into (moviehash corpus)
+  (let* ((movieID (gethash "id" moviehash)))
+    (unless (gethash movieID corpus)
+      (setf (gethash movieID corpus) moviehash))))
+
+(defun insert-movie-if-unknown (moviehash)
+  (insert-movie-if-unknown-into moviehash *movie-data*))
 
 (defun scrape (api-call)
   (let ((uri (concatenate 'string api-call "apikey=" *api-key*)))
@@ -52,24 +54,29 @@
       (if next (scrape-theaters (concatenate 'string next "&")))
       *movie-data*)))
 
-;; Some basic facilities to run this program as a standalone thing and not running it through a REPL
-(defun start ()
-  "Downloads the movies currently in theaters according to Rotten Tomatoes"
+(defun download ()
+  "Downloads the movies currently in theaters according to Rotten Tomatoes, and sets the current movie-corpus to this."
   (reset-stats)
-  (scrape-theaters *api-call-movies-in-theaters*)
+  (scrape-theaters *api-call-get-all-movies-in-theaters*)
+  (setf (gethash "timestamp" *movie-data*) (get-universal-time))
   'DONE)
 
-
-(defun append-statistics-to-file (filename movie-corpus)
-  (error "Appending the corpus ~A to file ~A is a great idea, but is unimplemented"
-	 movie-corpus
-	 filename))
-
 (defun join-corpus (corpus-1 corpus-2)
-  (error "Joining two corpuses (~A and ~A) together is a great idea, but is unimplemented"
-	 corpus-1 corpus-2))
-
-
+  "Returns a new corpus, made from the corpuses given, without overwriting them."
+  (let ((new-corpus (make-hash-table :test 'equal))
+	(oldest   (if (< (gethash "timestamp" corpus-1) (gethash "timestamp" corpus-2))
+		      corpus-1
+		      corpus-2))
+	(youngest (if (< (gethash "timestamp" corpus-1) (gethash "timestamp" corpus-2))
+		      corpus-2
+		      corpus-1)))
+    (mapcar (lambda (movie) (insert-movie-if-unknown-into movie new-corpus))
+	    (get-all-members youngest '("timestamp")))
+    (mapcar (lambda (movie) (insert-movie-if-unknown-into movie new-corpus))
+	    (get-all-members oldest '("timestamp")))
+    (setf (gethash "timestamp" new-corpus) (gethash "timestamp" youngest))
+    new-corpus))
+    
 (defun save-statistics-to-file (filename statistics-hashmap)
   (with-open-file (fstream filename :direction :output)
     (yason:encode statistics-hashmap (yason:make-json-output-stream fstream :indent 'T))))
@@ -78,16 +85,19 @@
   (with-open-file (fstream filename :direction :input)
     (yason:parse fstream)))
 
+(defun append-statistics-to-file (filename movie-corpus)
+  (let* ((filecorpus (load-statistics-from-file filename))
+	 (new-corpus (join-corpus filecorpus movie-corpus)))
+    (save-statistics-to-file filename new-corpus)))
+
 (defun save-stats (filename)
   (save-statistics-to-file filename *movie-data*))
 
 (defun load-stats (filename)
-  (error "Loading statistics from ~A is a great idea, but is unimplemented" filename))
+  (setf *movie-data* (load-statistics-from-file filename)))
 
-;; This code is for testing porpoises. Don't ruin everything. ;)
-(defparameter *movie-testing*
-  (with-open-file (fstream "sample.json" :direction :input)
-    (yason:parse fstream)))
+(defun append-stats (filename)
+  (append-statistics-to-file filename *movie-data*))
 
 					; This entire section is for calculating probabilities.
 					; From the definition of different types of probabilities to functions that generate the tests (or filter functions)
@@ -97,54 +107,54 @@
 					; the rationale being that there is no reason to fear multiple sources of reading from them,
 					; as long as there is only one source writing to them.
 
-; probability functions
+					; probability functions
 (defun probability (f)
-  "Iterates over the movies and calculates the propability of testfun returning a non-nil value."
+  "Iterates over the movies and calculates the propability of f returning a non-nil value."
   (let ((num-movies 0)
 	(num-successful 0))
-    (loop for key being the hash-keys of *movie-data*
-       do
-	 (incf num-movies)
-	 (if (funcall f (gethash key *movie-data*))
-	     (incf num-successful)))
+    (mapcar (lambda (movie)
+	      (incf num-movies)
+	      (if (funcall f movie)
+		  (incf num-successful)))
+	    (get-all-movies))
     (float (/ num-successful num-movies))))
 
 (defun joint-probability (a b)
   (let ((num-movies 0)
 	(num-successful 0))
-    (loop for key being the hash-keys of *movie-data*
-       do
-	 (incf num-movies)
-	 (if (and (funcall a (gethash key *movie-data*))
-		  (funcall b (gethash key *movie-data*)))
-	     (incf num-successful)))
+    (mapcar (lambda (movie)
+	      (incf num-movies)
+	      (if (and (funcall a movie)
+		       (funcall b movie))
+		  (incf num-successful)))
+	    (get-all-movies))
     (float (/ num-successful num-movies))))
   
 (defun conditional-probability (a b) 
-  (if (= b 0) 0) ;; If b = 0, then we return zero. We SHOULD have returned NaN, but I don't know how to do that.
-  (/ (joint-probability a b)
-     (probability b)))
+  (let ((prob-b (probability b)))
+    (if (= 0 prob-b) 
+	0
+	(/ (joint-probability a b)
+	   prob-b))))
 
-					; listing functions, lists out all movies that fits a filter.
+					; data representation functions, for listing out, counting, etc.
 (defun list-movies (f)
-  (loop for key being the hash-keys of *movie-data*
-     do
-       (let ((movie (gethash key *movie-data*)))
-	 (if (funcall f movie)
-	     (format 'T "~A (~A) Rated:~A (id:~A)~%"
+  (mapcar (lambda (movie)
+	    (if (funcall f movie)
+		(format 'T "~A (~A) Rated:~A (id:~A)~%"
 		        (gethash "title" movie)
 			(gethash "year" movie)
 			(gethash "mpaa_rating" movie)
-			(gethash "id" movie)))))
+			(gethash "id" movie))))
+	  (get-all-movies))
   'DONE)
 
-;; General helpful functions
-(defun nested-hash-lookup (strings hash)
-  (let ((nexthash (gethash (car strings) hash))
-	(nextkey (cdr strings)))
-    (if nextkey
-	(nested-hash-lookup nextkey nexthash)
-	nexthash)))
+(defun count-movies (f)
+  (let ((num 0))
+    (mapcar (lambda (movie)
+	      (if (funcall f movie) (incf num)))
+	    (get-all-movies))
+    num))
 
 ;; Generator functions that generates filter functions for the probability functions.
 (defun critic-rating (&key (min 0) (max 100))
